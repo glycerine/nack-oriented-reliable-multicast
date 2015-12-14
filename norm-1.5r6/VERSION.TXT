@@ -1,0 +1,547 @@
+			           NORM Version History
+
+Version 1.5r6
+=============
+    - Fixed Protolib ProtoBitmask bug for NDEBUG (release) builds.
+      This is an IMPORTANT fix! (Thanks to Deepak Pengoria and 
+      Kirill Kropivyanskiy)
+    - Fix to use of gmtime() call in normApp.cpp for WIN32 builds
+
+Version 1.5r5
+=============
+    - Added NORM_REMOTE_SENDER_RESET event to notify app when the sender
+      has been reset due to instance id, etc change
+    - Fixed possibly critical issue in Protolib ProtoDispatcher where
+      threaded dispatcher use (as the NORM API uses) could possibly result 
+      in timers not being serviced properly.  Most likely the issue could
+      only occur under certain, heavier NORM API usage patterns.  Nonetheless,
+      this is an important fix. (Thanks to Michael Savisko of Arris).
+    - Fixed FreeBSD build (Thanks to Hans Duedal)
+    - Changed from 'b' (build)  numbering schema to 'r' (release) to reduce
+      confusion with respect to "beta" versus "stable" releases.
+    - Note there are some "in-progress" API extensions in this release that
+      are not yet described in the developer's guide documentation. 
+     
+Version 1.5b4
+=============
+    - Corrected change in behavior of non-blocking version of 
+      NormGetNextEvent() call to be consistent with documentation
+
+Version 1.5b3
+=============
+    - Added API functions to support integration of NORM into ZeroMQ
+    
+Version 1.5b2
+=============
+    - Fixed bug with "graceful" stream closure when the sender application
+      did not first flush the stream before calling NormStreamClose()
+    - Added NORM_TX_FLUSH_COMPLETED notification for active stream
+      flushes, including the end of transmission flush when a stream
+      has been gracefully closed.
+    - Added NORM_SYNC_STREAM sync policy that is equivalent to NORM_SYNC_CURRENT
+      but attempts to sync to _start_ of stream (byte offset 0)
+    - Fixed issue with ackowledged, graceful stream closure to allow application
+      to choose to reset watermark before closing stream. The app needs to close
+      streams that remain unacknowledged at closure (i.e. catch TX_WATERMARK_COMPLETED
+      notification check acking status).  Acknowledged, graceful shutdown streams,
+      are automatically closed.
+    - Fixed issue with compilation for NormObjectSize constructor, MSB(), and LSB()
+      methods on 32-bit systems.  (Thanks to Bill Skiba).
+
+Version 1.5b1
+=============
+    - Rolled up all of the features described in Version 1.4b4 below
+      as a new "stable release" even though some minor documentation
+      issues are pending.
+    - Also includes the beginnings of code for "auto population" of
+      the sender acking node list for easier (less precoordination)
+      invocation of ACK-based flow control, etc
+
+Version 1.4b4
+=============
+    - Added option to set NORM receiver "rx cache count max", i.e. the 
+      maximum number of pending object for which the receiver will keep
+      state (per sender).  The "NormSetRxCacheLimit()" API call was added
+      to control this option.
+    - Implemented timer-based flow control so that NORM sender apps will not
+      force purge of old buffered objects (or stream data) for which there is
+      "recent" NACK activity.  What is considered "recent" is based upon
+      "flowControlFactor*GRTT_sender*(1 + backoffFactor)".  Note that a 
+      "flowControlFactor" of 2.0 is default, but can be adjusted.  A
+      new API call "NormSetFlowControl()" will be provided for this.  Note that
+      if insufficient buffering is allocated, this flow control may limit
+      transmission rate for a given (delay*bandwidth, packetLoss conditions. 
+      However, the likely alternative (if flow control is disabled) is that
+      reliability would not be perfectly maintained.  Note that  enabling the
+      sender "push" option of course overrides the flow control for streams. 
+      For file/data objects, the app could choose to  explicitly cancel
+      (dequeue) objects or disable the flow control if the app wishes to "push
+      ahead" regardless of impact to reliability.  Note that when "pushing",
+      NORM strives to provide whatever reliability is possible given the
+      buffering/delay/bandwidth constraints the app imposes.
+    - Fixed problem with NormServeNode::PassiveRepairCheck() that caused
+      NORM to sometimes falsely acknowledge an object that was not yet
+      received (Thanks to Jeff Bush for finding this one).
+    - Added initial option for Explicit Congestion Notification (ECN) support
+      in "real-world" code.  This includes raw packet capture (via ProtoCap)
+      so that ECN header info can be examined and setting ECT-Capable Transport
+      (ECT) bits in IP TOS/Trafffic Class header field.
+    - Fixed bug in NORM API "NormFileGetName()" call that would overrun buffer
+      (Thanks to Adrian Cox)
+    - Fixed bug with NORM probe_timer "lockup" when tx_rate is set to 0.0
+      (Thanks again to Adrian Cox)
+    - Added experimental receiver "real-time" buffer management option.           
+      (not yet in API).  Causes receiver to enqueue new data in favor of          
+      old, incomplete data when buffer-constrained.  _May_ be useful for          
+      apps where receipt of "fresh" data is more important than reliability.      
+    - Added "requeue" option to "norm" test app to allow multiple retransmissions 
+      of a file to be "stitched" together by a NORM receiver.  See the            
+      NormRequeueObject() API call.  Thanks to Keith Hogie/ Ed Criscuolo          
+      for suggesting this.                                                        
+    - Enhanced NormSetRxPortReuse() behavior when bindSessionToAddr is true       
+      such that for unicast sessions a UDP socket "connect()" call is made        
+      to effectively "bind" the NormSession rx_socket to the remote               
+      unicast addr.  This _should_ enable proper demultiplexing of                
+      multiple unicast sessions using the same port.  (Note that this             
+      same technique _may_ be adopted in the future for Source-Specific           
+      Multicast (SSM) support as well where a NormSession is associated           
+      with a specific remote single sender.)                                      
+    - Added code to NormServerNode::Activate() so that when a previously          
+      INACTIVE remote sender becomes active again (reactivated) that              
+      the receiver automatically kicks off a new cycle of self-initiated          
+      NACKing for any pending objects.  Note this code applies when               
+      the "reactivation" is due to a non-object message (e.g. NORM_CMD)           
+      as reception of an object message (NORM_DATA/ NORM_INFO) will               
+      re-awaken NACKing as needed anyway.                                         
+      (Thanks to Jeff Bush for helping determine the utility of this)             
+    - The NORM source code tree has been re-organized.                            
+    - Added Python language binding to NORM API, examples, etc                    
+      (Thanks to Tom Wambold)                                                     
+    - Added WAF build scripts, etc (Thanks again to Tom Wambold)                  
+    - iPhone Makefile added (Thanks yet again to Tom Wambold)                     
+    - Bug fix to NORM receiver "rx_object_table" and "rx_pending_mask"            
+      interplay in NormSenderNode class. (Thanks to Dave Talmage for              
+      stressing NORM enough to find this)                                         
+    - Bug fix with parsing of "limit" command in normApp.cpp                      
+      (Thanks again to Dave Talmage)                                              
+    - Fixed bug in "NormSessionMgr::NewSession()" where a call                    
+      was made to NormSession::SetTxPort() that should not                        
+      have been!       
+    - Changed API calls to use "SetTx-XXX" and "SetRx-XXX" more
+      consistently instead of "SetTransmit-XXX", etc.  Sorry for
+      a change to a couple of key API calls, but this will be
+      nicer in the long term.   
+    - Fixed problems with NormSession::SenderQueueAppCmd() and 
+      NormSession::SenderQueueSquelch() where there as two different
+      mis-uses of the NormSession::msg_pool.  Thanks to Richard Edell
+      (MITRE) for finding this one.   
+    - Fixed problem introduced with new support of multiple "fec_id"
+      types (this version) where receiver processing of NORM_CMD
+      messages with FecPayloadId content (e.g. FLUSH, SQUELCH, etc)
+      _before_ reception of NORM_DATA would result in erroneous
+      messages being generated.   
+      Thanks again to Richard Edell (MITRE) for identifying this. 
+    - Added optional parameter to NormSetCongestionControl() to allow
+      NORM-CC operation to collect feedback but NOT actually adjust
+      transmission rate.  Also added NORM_TX_RATE_CHANGED notification
+      to inform app of when rate change (or suggested change) occurs.  
+    - Fixed issue where a small object where INFO was received but no
+      DATA was not causing receiver NACK process to start upon FLUSH
+      receipt as it should.  (Thanks to John Unger for finding this!)    
+    - Updated JAVA JNI binding code courtesy patches from Kenn Fynn
+      (Dark Corner Software)          
+    - Fixed bug where remote sender fec_id value was not cached when
+      only NORM_INFO has been received (thanks to Qingjun Xiao of GSU)  
+    - Added NormSetAutoAckingNodes() API call (and underlying code) to
+      allow sender acking node list to be "auto populated" based on 
+      hearing any message from a receiver (and/or optionally sender).
+      Also added NormGetNextAckingNode() API call to allow iteration
+      through acking node list to determine status (learn of who is 
+      listening, etc).  A feature _may_ be added to notify the
+      sender application when new receivers are detected (and added
+      to the list) and maybe even allow per-receiver control of whether
+      an ACK should be solicited or not.  I.e., the acking node list would
+      become more of a "tracked" receiver list.     
+    - Added enhanced congestion control feature where the receiver always
+      limits the reported rate back to the sender at no more than double
+      the observed receive rate.  Adds LIMIT flag to feedback cc flags
+      to facilitate this reporting. This is not part of RFC 5740 but not
+      incompatible with it ... just works a little better.  In the future,
+      another way to do this might be to adjust the reported loss value
+      accordingly ... and that would be RFC 5740 compliant although there
+      should be an errata or addendum to the RFC for this.
+    - Added ECN-based congestion control and simple loss-tolerant
+      congestion control options.  These will be better documented and
+      perhaps extended in the future.
+    - Added extended precision loss estimate reporting by using "RESERVED"
+      field in CC feedback extension header.  Again, non-RFC 5740 but
+      backwards compatible.  This helps over large bandwidth-delay links
+      to get to higher data rates.  Some more work will be done in this area
+      such as perhaps returning to some form of slow start (exponential increase)
+      behavior after many consecutive RTT with no congestion events.  Probably should
+      mirror the return to slow start behavior that occurs when data transmission is
+      idle.  This needs to be evaluated as NORM may start being unfairly aggressive
+      in such environments.
+    - This code has the beginnings of an approach to enable automated population
+      of the sender "acking node list"
+    - This code release needs to be more fully documented, but was important
+      to get online since it has _many_ improvements over the prior 
+      "stable release"
+                             
+     
+
+Version 1.4b3
+=============
+    - Fixed many (hopefully all) cases where NORM_DATA message FLAG_REPAIR
+      was not always being set when it should resulting in receivers
+      sometimes "syncing" (or "re-syncing") to sender repair transmissions
+      when they shouldn't ... sometimes resulting in duplicative stream
+      data being delivered to the receiver app.
+    - Fixed case when repair request for old NORM_OBJECT_STREAM segment could
+      lockup advancement of stream when stream "push" is enabled.
+      (Thanks to Greg Lauer, Clifton Lin, BAE Systems CBMANET team)
+    - Added command-line options to "norm" demo app for "txrobustfactor"
+      and "rxrobustfactor"
+    - Added "NormNodeFreeBuffers()" API call and changed NORM behavior
+      to require app to free buffers allocate for remote sender unless
+      indefinite persistence is desired.
+    - Added "rxpersist" command-line option to "norm" demo app to make
+      "norm" demo app receivers keep full state on remote senders' 
+      indefinitely.
+    - Fixed issue with NormSession::QueueTxObject() where ASSERT() failure
+      occurred depending upon previous tx object enqueue/dequeue history
+      (Thanks to Jeff Bush for finding this one)
+    - Changed repeated scheduling of receiver remote sender inactivity
+      timer to ensure that busy CPU doesn't result in premature 
+      inactivity indication.
+    - Fixed issue with fix for stream lockup problem from below.
+      (this is in version 1.4b3a)
+      
+Version 1.4b2
+=============
+    - Fixed bug where NormObjectCancel() usage could result in extra
+      "release" of reference to NormObject
+      (Thanks to Alan McKechnie)
+    - Fixed minor issue with "repeatcount" command of "normApp.cpp"
+      where only the abbreviated command "repeat" was accepted.
+      (Thanks to Deric Sullivan)
+    - Added NormSetTxRobustFactor(), NormSetDefaultRxRobustFactor(), and
+      NormNodeSetRobustFactor() API calls
+    - Fixed issue with CC_INACTIVE being prematurely declared and modified
+      NORM RxSocketHandler to read a maximum of 100 consecutive packets
+      from socket at a time (This makes sure that receivers service timeouts,
+      provide feedback more timely, etc)
+      (Thanks to Peter Lu)
+    - Fixed case when repair request for old NORM_OBJECT_STREAM segment could
+      lockup advancement of stream.
+      (Also thanks to Peter Lu)
+
+Version 1.4b1
+=============
+    - Fixed condition where receivers kept state for remote senders "stuck"
+      with CC feedback (cc_enable) even if newer NORM_CMD(CC) messages
+      indicate that sender CC operation has been disabled.
+    - Fixed error in NormSession::SetTOS() method that transmogrifried the
+      default TTL value into TOS under certain conditions.
+      (thanks to Ron in 't Velt yet again for finding this and the one above).
+    - Made NormFile read/write more persistent (e.g. when EINT occurs)
+    - Fixed NormObject::PassiveRepairCheck() bug that incorrectly reported
+      no repair needed when in fact, the last segment was missing.
+    - Fixed ProtoSlidingBitmask error that interfered with proper 
+      sender stream advancement under severe conditions
+    - NORM still used old "MDP" FEC codecs but now explicitly check for
+      FEC ID == 129 and FEC instance id == 0.  Can be built with
+      -DASSUME_MDP_FEC to avoid this check in case of backward compatbility
+      issue.  Future NORM release will be using new FEC implementation
+      for Reed-Solomon coding but will continue to support compile-time
+      backwards compatibility option to use old MDP FEC encoder.
+    - Added "lowDelay" and other options to "norm" demo application
+    - Modified "lowDelay" option for silent receiver use to allow
+      control of FEC block delay (how many blocks to wait before passing
+      partially-received coding blocks to application).
+    - Added "Norm Pre-Coder" (NPC) utility to distribution.
+
+Version 1.3b9
+=============
+    - Fixed ProtoSocket WINVER stuff and NormApplicationMsg::SetContent()
+      (thanks to Stefan Titze for these)
+    - Fixed issue in NormSession::OnRepairTimeout() where a debug 
+      message erroneously dereferenced a NormObject pointer as
+      NormFileObject (led to run-time issue in optimized code build)
+      (thanks to Charlie Davis once again)
+    - Fixed places where NORM_CMD(FLUSH/SQUELCH) messages didn't have
+      FEC source block length properly set (thanks to Ron in 't Velt)
+    - Fixed misuse of "delete" operator where "delete[]" should have 
+      been used instead in "normEncoder.cpp" (thanks to Jon of Totient?)
+    - Fixed error in NormQuantizeRate() and NormUnQuantizeRate() functions
+      in "normMessage.h".  (Thanks to Julian Onions for getting it right
+      in the Ethereal NORM dissector he created).
+    - Fixed case in NormObject::NextServerMsg() where old recovered block
+      could cause assertion failure (thanks to John Wood for the stress testing)
+    - Fixed "normApi.cpp" code that was resulting in NormServerNode reference
+      counts not being updated properly (thanks to Jon Dyte for this)
+    - Fixed missed initialization of NormServerNode::nominal_packet_count and
+      NormLossEstimator2::init members (Thanks to Jon Dyte again).
+    - Fixed bug where NORM_DATA messages containing FEC parity content had
+      8 bytes of extraneous content appended in their payload (Thanks to
+      Jon Jannucci for finding this one).
+    - Fixed bug where receiver loss estimate returning to ZERO could result
+      in a floating point exception in NormSession::CalculateRate()
+      (thanks to Ian Downard for finding this one)
+    - Re-ordered NORM_DATA "payload_length" and "payload_msg_start" fields
+      to be consistent with revised NORM spec.
+    - Corrected the detection of "data loss" when application (or API)
+      fails to consume received stream data before it is discarded.
+    - Fixed bug where when small "txbuffersize" was set for sender, but
+      a relatively large FEC block size was kept, the sender app would 
+      not be notified by stream "vacancy"
+    - Fixed bug with initialization of grtt_estimate when NormSetTransmitRate()
+      was called _before_ NormStartSender()
+    - Fixed intermediate issue where flush_timer mis-scheduling caused
+      sender to "hang" (Thanks to Scott Bates for quickly noticing this)
+    
+Version 1.3b8
+=============
+    - Fixed implementation of NormQuantizeGroupSize() in "normMessage.h"
+      (Thanks to David Lucas for finding the bug)
+    - Fixed some issues with NORM/Protolib ns-2 support
+    - Added API NormGetGrtt() and NormNodeGetGrtt() calls
+      to support some application needs.
+    - Modified transmission of FEC parity segments such that their
+      length is only as big as needed to support the maximum
+      sent segment size for the associated block (this allows more
+      latitude for stream apps in setting their sender segment
+      size and flushing).
+    - Added NORM_CC_ACTIVE and NORM_CC_INACTIVE notifications to indicate
+      whether receivers are actively providing congestion control feedback
+      (Thanks to Charlie Davis for the great suggestion)
+    - Fixed some floating-point exceptions that could occur in receiver
+      congestion control tracking under extreme circumstances.  This included
+      enhancement of receiver receive rate tracking.
+      (Thanks to Ian Downard for finding these issues)
+    - Changed naming of "SERVER" notifications in API to "SENDER"
+      notifications to be consistent with the rest of API.
+    - Debug statistics now indicate correct nack/suppressed counts
+      for silent receiver operation (i.e. none)
+    - Refined activity timeout of remote sender
+      (still need to give the app more control over resource allocation)
+
+Version 1.3b7
+=============
+    - Deprecated NORM stream payload flags in favor of "payload_msg_start"
+      field per revised NORM specification (draft-ietf-rmt-pi-nom-revised-00)
+      This included interpreting NORM_DATA (source segment) messages for
+      NORM_OBJECT_STREAM with "payload_len" field value of ZERO as
+      "stream control" messages where the "payload_msg_start" field serves
+      as the stream control message type indications.  The "End-of-Stream"  
+      control message consists of "payload_msg_start" = 0 
+      when "payload_len" = 0.  No other stream control messages are yet
+      defined.  The next revision of the NORM spec will describe this.
+      (Thus for NORM stream purposes, this NORM version is _not_ interoperable 
+      with previous versions)
+    - Fixed problem where NormServerNode "retrieval_pool" had allocated
+      segments one byte too small (although this is OBE with the above
+      deprecation of stream flags which is what the byte was used for)
+    - Fixed bug where sender objects were not properly "closed" when the
+      object table was cleaned upon NormStopSender()
+    - Added support to VC++ .Net workspace for building "Norm.dll"
+      (NORM as a dynamic linked library) and similarly added option
+      to build "libnorm.dylib" for MacOS. ("libnorm.so" for other
+      Unix platforms should already work).
+    - Fixed NormSetTOS() call.
+    - Added option to NormSetPortReuse() to maintain INADDR_ANY binding
+      if desired.
+    - Refined management of NORM sender stream buffer so sender wouldn't
+      prematurely discard buffer stream blocks when alot of small
+      segments (smaller than segment_size) were buffered.
+    - Added NormStopInstance() call to provide means for multi-threaded
+      NORM apps to stop the NORM protocol engine and awake any other thread
+      blocked on NormGetNextEvent() to signal shutdown of NormInstance.
+    - Also updated code so ns-2 build works and tested w/ ns-2.29
+
+Version 1.3b6
+=============
+    - Fixed some oversite bugs that crept in with changes in 1.3b5
+      (Fixed code related to NormNode/NormObject retain and release)
+    - Changed NORM_TX_QUEUE_VACANCY posting behavior to be less chatty.
+      NORM_TX_QUEUE_VACANCY now posted _only_ after a call to 
+      NormStreamWrite() fails to fulfill a full write request
+      (i.e. returns less than the "numBytes" requested to be written)
+      This helps prevent build up of these notifications in multi-
+      threaded applications that write to a stream in a different
+      thread than is fetching events via NormGetNextEvent().
+    - Added NORM_TX_WATERMARK_COMPLETED notification and NormGetAckingStatus()
+      function to provide API support for optional positive acknowledgment
+      (ACK) collection in NORM implementation.  Note that use of
+      NormAddAckingNode(session, NORM_NODE_NONE) enables a NACK-based
+      watermark flushing concurrent with ongoing data transmission that
+      can be used as a scalable application-level flow control mechanism.
+  
+Version 1.3b5
+=============
+    - Changed ProtoSocket::GetInterfaceAddress() and related methods on Win32
+      to use different system APIs depending on Windows version.  
+    - Fixed some details related to compilation with g++ 4.x.
+    - Various issues fixed thanks to input from Timothy Chaplin.
+    - Fixed some issues where attempt to resync rx stream after long
+      outages (at high data rates) called assertion failures
+      (Thanks to Charlie Davis for finding this one)
+    - Fixed problem where, on Win32, the sender GRTT estimate was not
+      being updated (in the downward direction) properly.
+    - Changes to Protolib & Norm to support build of shared libraries
+      (Thanks to Dave Talmage & Timothy Mann)
+    - Added "NormSetRxPortReuse()" API and code support to allow 
+      (with care) multiple NORM instances on the same host.
+    - Fixes to NORM congestion control including:
+      1) measurement of "recv_rate" at low transmission rates
+         fixed (made sure measurement was over sufficient
+         interval at low rates including cc startup)
+      2) Re-instated code to reduce rate when feedback stopped
+         being received.
+      3) Changed to time-based aging of feedback to "deactivate"
+         stale congestion control feedback representative state
+         kept by sender.
+      4) Fixed mis-set of PLR flag as CLR flag and fixed bug
+         in updating CC node list upon CC feedback reception.
+      (Thanks to Praveen Gopala for prompting all of this)
+    - Fixes for Win32 large file support "in normFile.cpp"
+      (Thanks to Titze Stefan for this fix).
+    - Added "NormSetGrttMax()", "NormSetGrttProbingMode()",
+      and "NormSetGrttProbingInterval()" APIs to control
+      NORM GRTT measurement/estimation process.
+      (Thanks to Dave Lucas for prompting me here)
+    - Changed posting of NORM_TX_QUEUE_VACANCY for streams such
+      that new postings of this event are made, _only_ after a
+      successful call to NormStreamWrite() ... This results in
+      reduced posting of unnecessary vacancy events, but now the
+      onus is on the app to pay attention to this event, since
+      another of it's type won't be posted until the app calls
+      NormStreamWrite() with non-zero content length.
+      (Thanks to Charlie Davis for bringing this to my attention) 
+    - Made sure messages from self are ignored unless loopback
+      is explicitly enabled (see NormSetLoopback()) even for
+      operating systems whose ProtoSocket::SetLoopback() doesn't
+      work properly.
+
+Version 1.3b4
+=============
+    - Added NormSetTxCacheBounds(), see NormDevGuide for details
+    - Fixed issue with NormStreamSeekMsgStart() that crept in
+      somehow (Thanks to Jody Hagins for finding it).
+    - Added code to check that NormFileEnqueue() argument is
+      actually a file and not a directory name (Thanks to
+      Charlie Shyr for finding this)
+    - Fixed NormSession::Open() so that IPv6 works
+    
+Version 1.3b3
+=============
+    - Added NORM_TX_FLUSH_COMPLETE notification so the sender app
+      can make an educated guess as to when his receivers are
+      all happy.
+    - Added NORM API sample code in "examples" directory.
+    - Added NormObjectGetBytesPending() call for receivers to
+      use to monitor reception progress.
+
+Version 1.3b2
+=============
+    - Added "graceful" stream shutdown option to
+      NORM API via the NormStreamClose() call.
+    - Embedded FLAG_STREAM_END flag in "payload_reserved"
+      field of NORM_DATA messages.  This is beyond 
+      the current RFC 3940 spec for NORM, but probably
+      something to push for addition to the next revision
+      of the spec.
+    - Embedded equivalent FLAG_MSG_START in "payload_reserved"
+      field of NORM_DATA messages.  This allows message
+      boundary recovery for streams upon FEC decoding.
+      Again, this is "beyond" the current NORM spec, but
+      probably a good idea (Other stream control functions
+      might use this field as well)
+    - Added Visual Studio .NET project files
+
+Version 1.3b1
+=============
+    - Prevented pile-up of TX_QUEUE_VACANCY notifications
+    - Fix/optimization to ProtoDispatcher threaded operation
+      to prevent possible (although minor) race condition
+      during threaded operation.
+    - Added NORM API calls: NormSetTxSocketBuffer(), 
+      NormSetRxSocketBuffer(), NormSetUserData(), 
+      NormGetUserData(), and implemented overlooked
+      NormGetDescriptor()
+    - Thanks again to Charlie Davis for finding some
+      performance deficiencies.
+
+Version 1.2b9
+=============
+    - Fixed bugs with NormServerNode::retrieval_pool mgmnt
+      (Thanks to Charlie Davis for tracking these down!!!)
+    - Changed ProtoDispatcher thread stuff so threads
+      (e.g. the NORM API thread) are only actively
+      signaled and interrupted when absolutely necessary
+    - Added support for NORM_TX_QUEUE_VACANCY notification
+       (for NORM_OBJECT_STREAM only at the moment)
+    
+Version 1.2b8
+=============
+    - Fixed bug introduced during "alignment" changes
+      in previous release.
+    - Fixed Protolib WIN32 build issue
+    
+Version 1.2b7
+=============
+    - Changed normMessage.[h|cpp] to fix alignment issues
+      (and other alignment stuff)
+    - Fixed bug in NormCmdCCMsg::Iterator::GetNextNode()
+      (might significantly help CC performance
+    - Fixed NormServerNode::FreeBuffers() bug which
+      could result in seg fault on remote server timeout
+      or at app shutdown
+    - Fixed bug where tx_sequence count was being
+      incremented for all transmitted messages (The "fix"
+      does not yet address separate increment of messages
+      sent to different addresses, etc). The bug impacted
+      congestion control performance when nodes acted as
+      sender _and_ receiver (caused receives to overestimate
+      packet loss)
+    
+Version 1.2b6
+=============
+    - Added normApi.cpp into libNorm.a (Norm.lib (WIN32)) builds
+    - Fixed Solaris build (new protolib code)
+    - Included very rough user's guide for "norm" demo app
+    
+Version 1.2b5
+=============
+    - Initial release with theoretically-working API 
+      (including "Norm Developer's Guide!")
+
+Version 1.2b4
+=============
+    - Finally remembered to update this file!
+    - Added "help" command to "norm" demo app (Thanks Marinho Barcellos!)
+    - New rxbuffer mgmnt scheme to better use limited buffer space.
+    - Removed explicit rate limit on receiver feedback messages
+    - API more complete and established better API naming conventions
+      (documentation soon to follow, I promise!)
+    - There have been some "cc" tweaks and bug fixes.  
+    - NORM RFC 3940 was released and this version is in compliance.
+    - Added optional positive acknowledgements for sender-defined
+      "watermarks".
+    - Fixed multicast leave problem when interfaceName was used for join
+    
+Version 1.1b9
+=============
+    - There have been a number of bug fixes since 1.1b3.  This release
+      fixes a bug in NormBlockBuffer::Remove() and 
+      NormObjectBuffer::Remove(). (Thanks Thava!)
+      
+Version 1.1b3
+=============
+    - Started keeping version history.  This release includes
+      some bug fixes, smoother congestion control operation, etc
+      over some of the earlier releases.
+      
+Please address bug reports, suggestions etc to the email list:
+
+mailto:norm-dev@pf.itd.nrl.navy.mil
